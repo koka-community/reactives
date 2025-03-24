@@ -12,7 +12,7 @@ pub named effect rref<a>
   fun emit(a: a): () // We can emit a value from our reactive
   ctl watch_<b>(p: reactive<b>, immediate: bool): b // We can watch other reactives
   fun listen-self(f: (a) -> <pure,st<global>> ()): () // We can listen to our own reactive
-  ctl yield(): () // We can yield our reactive 
+  ctl init-yield_(): () // We can yield our reactive 
 
 // Watching a reactive is just a matter of adding our own continuation to the other-reactive's listeners
 pub fun watch(r: ev<rref<a>>, p: reactive<b>, immediate: bool = True): <pure,st<global>> b
@@ -38,10 +38,12 @@ pub fun mk-reactive(reactor-fn: ev<rref<a>> -> <pure,st<global>> a, name: maybe<
   val continuex: ref<global, () -> <pure,st<global>> ()> = ref(fn(){})
   // The initialization routine
   val do-init = fn(rref)
-         rref.yield() // First yield, to not eagerly initialize
+         rref.init-yield_() // First yield, to not eagerly initialize
          val result = reactor-fn(rref) // Then when demanded the first time we initialize, using the user provided reactor function
          rref.emit(result) // Then we emit the final result of the user provided function
          () // But we don't return anything directly
+  
+  // The reactive itself
   val reactive = Reactive(ref([]), // No listeners yet
     fn(){ // The state function
     match !current-state // If the state is not initialized
@@ -52,6 +54,7 @@ pub fun mk-reactive(reactor-fn: ev<rref<a>> -> <pure,st<global>> a, name: maybe<
           Just(x) -> x // If the state is initialized, we return the value
       Just(k) -> k // The state is already initialized, return it's current value
     })
+  
   named handle(do-init)
     fun emit(new-value) // Emitting
       current-state := Just(new-value) // Set the current state
@@ -59,7 +62,7 @@ pub fun mk-reactive(reactor-fn: ev<rref<a>> -> <pure,st<global>> a, name: maybe<
         listener(new-value)
     fun listen-self(f) // Set a function to run whenever the current reactive's state changes.
       reactive.listen(f, immediate = False)
-    raw ctl yield() // Yield to initialize the reactive only when demanded
+    raw ctl init-yield_() // Yield to initialize the reactive only when demanded
       continuex := (fn() {rcontext.resume(())})
     raw ctl watch_(other-reactive, trigger-immediately)
       // Watch the value of another reactive
