@@ -29,4 +29,6 @@ fun main()
          // Starts watching r1, and triggers it's initialization if not already listened to.
          val x = r.watch(r1, True)
          x + 1
-   (r2.current)()
+   
+   r2.listen fn(x)
+      trace("Final: " ++ x.show)
