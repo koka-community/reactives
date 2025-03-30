@@ -9,8 +9,8 @@ import reactives/reactives
 
 fun main()
    val r1 = 
-         with r : ev<rref<int>> <- mk-reactive
-         r.listen-self fn(x) 
+         with r : reactive<int> <- mk-reactive(name = Just("r1"))
+         r.listen fn(x) 
             trace("R1: " ++ x.show)
          
          r.emit(0)
@@ -19,8 +19,8 @@ fun main()
 
          2
    val r2 = 
-         with r : ev<rref<int>> <- mk-reactive
-         r.listen-self fn(x) 
+         with r : reactive<int> <- mk-reactive(name = Just("r2"))
+         r.listen fn(x) 
             trace("R2: " ++ x.show)
          
          trace("Hi")
@@ -29,6 +29,24 @@ fun main()
          // Starts watching r1, and triggers it's initialization if not already listened to.
          val x = r.watch(r1, True)
          x + 1
-   
-   r2.listen fn(x)
-      trace("Final: " ++ x.show)
+
+   val r3 = 
+         with r : reactive<int> <- mk-reactive(name = Just("r3"))
+         r.listen fn(x) 
+            trace("R3: " ++ x.show)
+         
+         trace("Hi2")
+         // Emits a value from this reactive
+         r.emit(200)
+         // Starts watching r2, and triggers it's initialization if not already listened to.
+         val x = r.watch(r2, True)
+         if x == 3 then
+            r2.emit(20)
+            trace("Reset r3")
+            r.restart()// Order matters?
+         //    r2.restart()
+         x + 2
+
+   // r3.listen fn(x)
+   //    trace("Final: " ++ x.show)
+   r3.current()
