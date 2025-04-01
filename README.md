@@ -45,3 +45,4 @@ Instead there are wrappers that expose the intended interface and additionally a
 - Better lifetime management (add hooks for user to react to more lifecycle changes)
 - Overrides - via implicits?
 - UI library built on this?
+- Allow more outside effects in reactives (tricky, but I could allow at least `io-noexn`)
