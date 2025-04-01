@@ -38,11 +38,11 @@ import std/core/unsafe
 // The reactor is not exposed outside this module, and is not meant to be used directly.
 // 
 // Instead there are wrappers that expose the methods while helping manage subscriptions etc.
-// - rref<a>: a reactor reference (self-reference), let's you manage the state of the reactor, and add subscriptions (which are automatically tracked)
-// - reactive<a>: a reference (outside the reactor) to another reactor
-// - reactive-top<a>: a reference to a top level variable (delayed<react-eff,reactive<a>> due to the fact that top level variables cannot have effects)
-// - reactive-family<a,b>: a family of reactives, that manage state similarly, but have different arguments (corresponds to reactive-top<a>)
-// - family-instance<a,b>: a family instance, that holds the reactive and the argument (similar to rref<a>)
+// - `rref<a>`: a reactor reference (self-reference), let's you manage the state of the reactor, and add subscriptions (which are automatically tracked)
+// - `reactive<a>`: a reference (outside the reactor) to another reactor
+// - `reactive-top<a>`: a reference to a top level variable (`delayed<react-eff,reactive<a>>` due to the fact that top level variables cannot have effects)
+// - `reactive-family<a,b>`: a family of reactives, that manage state similarly, but have different arguments (corresponds to `reactive-top<a>`)
+// - `family-instance<a,b>`: a family instance, that holds the reactive and the argument (similar to `rref<a>`)
 named effect reactor<a>
   // This is internal, keeps the initial continuation so we can reset the state.
   ctl init-yield_(): () 
