@@ -5,19 +5,20 @@
    use this file except in compliance with the License. A copy of the License
    can be found in the LICENSE file at the root of this distribution.
 ----------------------------------------------------------------------------*/
-// A reactive state management library
+// A reactive state management library.
 // Features:
 //  - Fine grained dependency tracking and incremental computation
 //  - Automatic subscription management
 //  - Support for families that are similar other than an argument
-// TODO: Better lifetime management (auto-disposal/pausing when no listeners)
-// TODO: Fix cancelation
+// Inspired by `riverpod` from the `dart-lang` ecosystem.
+// TODO: Better lifetime management
 // TODO: Overrides - via implicits?
+// TODO: UI library built on this?
 module reactives
 import std/core/unsafe
 
-// A reactor is a fine-grained piece of state, with dependency tracking and incremental computation
-// A reactor notifies dependencies of changes in its state
+// A reactor is a fine-grained piece of state, with dependency tracking and incremental computation.
+// A reactor notifies dependencies of changes in its state.
 //
 // Holds 
 //  - current state of a reactive element
@@ -43,69 +44,69 @@ import std/core/unsafe
 // - reactive-family<a,b>: a family of reactives, that manage state similarly, but have different arguments (corresponds to reactive-top<a>)
 // - family-instance<a,b>: a family instance, that holds the reactive and the argument (similar to rref<a>)
 named effect reactor<a>
-  // This is internal, keeps the initial continuation so we can reset the state
+  // This is internal, keeps the initial continuation so we can reset the state.
   ctl init-yield_(): () 
-  // A check to see if the reactor is initialized
+  // A check to see if the reactor is initialized.
   fun is-initialized(): bool
-  // An identifier for the reactive
+  // An identifier for the reactive.
   fun name_() : string
-  // Emits a state value
+  // Emits a state value.
   fun emit_(a: a): () 
-  // Watches another reactor's state (immediate is whether to demand the value immediately, or wait for it to be demanded)
+  // Watches another reactor's state (immediate is whether to demand the value immediately, or wait for it to be demanded).
   ctl watch_<b,c>(p: reactive<b>, immediate: bool, sel: selector<b,c>): c
-  // Listen to the reactor's state, with a debug name for the listener's computation
-  // Returns a subscription handle
+  // Listen to the reactor's state, with a debug name for the listener's computation.
+  // Returns a subscription handle.
   fun listen_(f: listen-fn<a>, dependent: string, notify: (a) -> react-eff bool): subscription<a>
-  // Cancels a subscription
+  // Cancels a subscription.
   fun cancel_(s: subscription<a>): ()
-  // Pauses a subscription (won't call it, but won't remove it either)
+  // Pauses a subscription (won't call it, but won't remove it either).
   fun pause_(s: subscription<a>): ()
-  // Pauses the reactor (won't react to any changes, other than canceling and keeping track of where to resume when unpaused)
+  // Pauses the reactor (won't react to any changes, other than canceling and keeping track of where to resume when unpaused).
   fun pause(): ()
-  // Unpauses a subscription (will call the listener again)
+  // Unpauses a subscription (will call the listener again).
   fun unpause_(s: subscription<a>): ()
-  // Unpauses the reactor (will react to the latest change that happened while paused)
+  // Unpauses the reactor (will react to the latest change that happened while paused).
   fun unpause(): ()
-  // Restart the reactor from the beginning (will reinitialize the state)
+  // Restart the reactor from the beginning (will reinitialize the state).
   fun restart_(): () 
-  // Reset the reactor (will clear the state, but not reinitialize it)
+  // Reset the reactor (will clear the state, but not reinitialize it).
   fun reset_(): () 
   fun check-reset(): ()
-  // Get the current state
+  // Get the current state.
   fun current_(): a
-  // Add a cancelation function that will need to be cleaned up if the reactor resets to before this point
-  // That can happen if a dependency changes before this point, or if the reactor is reset
+  // Add a cancelation function that will need to be cleaned up if the reactor resets to before this point.
+  // That can happen if a dependency changes before this point, or if the reactor is reset.
   fun add-cancel(f: unit-cb): ()
 
 // The basic effects needed for reactives <pure> (due to named handlers), 
-//   and st<global> (due to the fact that we need to be able to mutate)
+//   and st<global> (due to the fact that we need to be able to mutate).
 pub alias react-eff = <pure,st<global>>
-// A callback type used for cancelations, initialization, and other things
+// A callback type used for cancelations, initialization, and other things.
 pub alias unit-cb = () -> react-eff ()
-// A callback type used for listeners and dependencies
+// A callback type used for listeners and dependencies.
 pub alias listen-fn<a> = (a) -> react-eff ()
 
-// A listener contains a function to be called when the state of the reactor changes
-// The function could be a plain callback, or a continuation for another reactive (created using `watch`)
-// It has a unique id, so it can be found in a list and paused and unpaused
+// A listener contains a function to be called when the state of the reactor changes.
+// The function could be a plain callback, or a continuation for another reactive (created using `watch`).
+// It has a unique id, so it can be found in a list and paused and unpaused.
 abstract type listener<a>
   Listener(sid: int, callback: listen-fn<a>, sub: subscription<a>, paused: bool = False, notify: (a) -> react-eff bool)
 
 abstract type selector<a,b>
   Selector(selector: a -> b, eq: (b, b) -> bool)
 
-// A subscription is just a unique id, that can be used to cancel a listener
+// A subscription is just a unique id, that can be used to cancel a listener.
 abstract struct subscription<a>
   sid: int
   rref: rref<a>
   canceled: ref<global,bool>
 
-// A reactive just wraps the reactive ref, and is accessible from outside the reactor
+// A reactive just wraps the reactive ref, and is accessible from outside the reactor.
 abstract div type reactive<a>
   Reactive(rref: ev<reactor<a>>)
 
-// A `reactive-top<a>` delays the reactive creation until it is forced
-// This is needed because top level variables cannot have effects
+// A `reactive-top<a>` delays the reactive creation until it is forced.
+// This is needed because top level variables cannot have effects.
 pub alias reactive-top<a> = delayed<react-eff,reactive<a>>
 
 // A reactive reference `rref<a>` is a reference to a reactor, that can be used to manage the state of the reactor from within
@@ -119,58 +120,83 @@ pub alias reactive-family<a,b> = ((b) -> react-eff reactive-top<a>)
 pub type family-instance<a,b>
   Instance(reactive: rref<a>, arg: b)
 
-// Watching a reactive is just a matter of adding our own continuation to the other-reactive's listeners
+// Register to rerun the continuation with the current state of `other` whenever it changes.
+// - Set `immediate` to `False` if you don't want to demand the other reactive's value immediately, and only react if it `emit`s by itself.
 fun reactor/watch(r: ev<reactor<a>>, other: reactive<b>, immediate: bool = True): pure b
   r.watch_(other, immediate, Selector(fn(x) x, fn(x, y) False))
-fun reactor/select(r: ev<reactor<a>>, other: reactive<b>, select: b -> c, immediate: bool = True, ?(==): (c, c) -> bool): pure c
-  r.watch_(other, immediate, Selector(select, ?(==)))
+// Register to rerun the continuation with the current state of `other` whenever it changes.
+// - Set `immediate` to `False` if you don't want to demand the other reactive's value immediately, and only react if it `emit`s by itself.
 pub fun rref/watch(r: rref<a>, other: reactive<b>, immediate: bool = True): pure b
   r.rref.watch(other, immediate)
-pub fun rref/select(r: rref<a>, other: reactive<b>, selector: b -> c, immediate: bool = True, ?(==): (c, c) -> bool): pure c
-  r.rref.select(other, selector, immediate)
+// Register to rerun the continuation with the current state of `other` whenever it changes.
+// - Set `immediate` to `False` if you don't want to demand the other reactive's value immediately, and only react if it `emit`s by itself.
 pub fun family/watch(r: family-instance<a,b>, other: reactive-top<c>, immediate: bool = True): react-eff c
   r.reactive.watch(other.force, immediate)
-pub fun family/select(r: family-instance<a,b>, other: reactive-top<c>, selector: c -> d, immediate: bool = True, ?(==): (d, d) -> bool): react-eff d
-  r.reactive.select(other.force, selector, immediate)
+// Register to rerun the continuation with the current state of `other` whenever it changes.
+// - Set `immediate` to `False` if you don't want to demand the other reactive's value immediately, and only react if it `emit`s by itself.
 pub fun delayed/watch(r: rref<a>, other: reactive-top<b>, immediate: bool = True): react-eff b
   r.rref.watch(other.force, immediate)
+// Register to rerun the continuation with the a derivative of the state of `other` whenever that derived state changes.
+// - Set `immediate` to `False` if you don't want to demand the other reactive's value immediately, and only react if it `emit`s by itself.
+fun reactor/select(r: ev<reactor<a>>, other: reactive<b>, select: b -> c, immediate: bool = True, ?(==): (c, c) -> bool): pure c
+  r.watch_(other, immediate, Selector(select, ?(==)))
+// Register to rerun the continuation with the a derivative of the state of `other` whenever that derived state changes.
+// - Set `immediate` to `False` if you don't want to demand the other reactive's value immediately, and only react if it `emit`s by itself.
+pub fun rref/select(r: rref<a>, other: reactive<b>, selector: b -> c, immediate: bool = True, ?(==): (c, c) -> bool): pure c
+  r.rref.select(other, selector, immediate)
+// Register to rerun the continuation with the a derivative of the state of `other` whenever that derived state changes.
+// - Set `immediate` to `False` if you don't want to demand the other reactive's value immediately, and only react if it `emit`s by itself.
+pub fun family/select(r: family-instance<a,b>, other: reactive-top<c>, selector: c -> d, immediate: bool = True, ?(==): (d, d) -> bool): react-eff d
+  r.reactive.select(other.force, selector, immediate)
+// Register to rerun the continuation with the a derivative of the state of `other` whenever that derived state changes.
+// - Set `immediate` to `False` if you don't want to demand the other reactive's value immediately, and only react if it `emit`s by itself.
 pub fun delayed/select(r: rref<a>, other: reactive-top<b>, selector: b -> c, immediate: bool = True, ?(==): (c, c) -> bool): react-eff c
   r.rref.select(other.force, selector, immediate)
 
-// Listening to a reactive's state updates
+// Listens to a reactive's state updates.
 // 
-// Involves adding our callback to the reactor's listeners
-// If the reactor we want to listen to is already initialized, we can call the callback immediately if requested
-// Otherwise if the reactor is not initialized, we will demand its value to cause it to be initialized (which will take care of calling our callback)
-// In any case we will return a subscription
-// TODO: Consider separating the initialization from getting the state
+// Involves adding our callback to the reactor's listeners.
+// If the reactor we want to listen to is already initialized, we can call the callback immediately if requested.
+// Otherwise if the reactor is not initialized, we will demand its value to cause it to be initialized (which will take care of calling our callback).
+// In any case we will return a subscription.
+// TODO: Consider separating the initialization from getting the state.
 fun reactor/listen(r: ev<reactor<a>>, callback: listen-fn<a>, notify: a -> react-eff bool, immediate: bool = False, ?kk-file-line: string): react-eff subscription<a>
-  val sub = r.listen_(callback, ?kk-file-line, notify) // Add the listener to the list of listeners
-  if r.is-initialized() && immediate then // If initialized and immediate
-    callback(r.current_()) // Call the callback with the current state
+  val sub = r.listen_(callback, ?kk-file-line, notify) // Add the listener to the list of listeners.
+  if r.is-initialized() && immediate then // If initialized and immediate.
+    callback(r.current_()) // Call the callback with the current state.
     sub
   elif immediate then
-    r.current_() // Otherwise demand its current value to initialize it (which itself will call listeners)
+    r.current_() // Otherwise demand its current value to initialize it (which itself will call listeners).
     sub
   else sub
-// When listening from another reactor, we add a cancelation to our cancelation list
-// This ensures we clean up subscriptions which are no longer applicable
+// `listen`s to another reactive's state changes, calling `callback`.
+// - You will only get updates when `notify` returns true.
+// - When `immediate` is true, you will get an immediate callback with the current value.
 pub fun rref/listen(r : rref<a>, other: reactive<b>, callback: listen-fn<b>, notify: b -> react-eff bool = fn(x) True, immediate: bool = False, ?kk-file-line: string): react-eff subscription<b>
-  val sub = other.rref.listen(callback, notify, immediate=immediate) // Add the listener to the list of listeners
+  val sub = other.rref.listen(callback, notify, immediate=immediate) // Add the listener to the list of listeners.
   r.rref.add-subscription(sub)
   sub
+// `listen`s to another reactive's state changes, calling `callback`.
+// - You will only get updates when `notify` returns true.
+// - When `immediate` is true, you will get an immediate callback with the current value.
 pub fun family/listen(r : family-instance<a,b>, other: reactive-top<c>, callback: listen-fn<c>, immediate: bool = False, ?kk-file-line: string): react-eff subscription<c>
   r.reactive.listen(other.force, callback, immediate=immediate)
+// `listen`s to another reactive's state changes, calling `callback`.
+// - You will only get updates when `notify` returns true.
+// - When `immediate` is true, you will get an immediate callback with the current value.
 pub fun delayed/listen(r : rref<a>, other: reactive-top<b>, callback: listen-fn<b>, immediate: bool = False, ?kk-file-line: string): react-eff subscription<b>
   r.listen(other.force, callback, immediate=immediate)
-// Same as listen, but using `on` name for better readability in some cases
+// `on` is a synonym for `listen` typically used for listening to mutations.
 pub fun rref/on(r : rref<a>, other: reactive<b>, callback: listen-fn<b>, ?kk-file-line: string): react-eff subscription<b>
   r.listen(other, callback)
+// `on` is a synonym for `listen` typically used for listening to mutations.
 pub fun family/on(r : family-instance<a,b>, other: reactive-top<c>, callback: listen-fn<c>, ?kk-file-line: string): react-eff subscription<c>
   r.reactive.listen(other.force, callback)
+// `on` is a synonym for `listen` typically used for listening to mutations.
 pub fun delayed/on(r : rref<a>, other: reactive-top<b>, callback: listen-fn<b>, ?kk-file-line: string): react-eff subscription<b>
   r.listen(other.force, callback)
-pub fun rref/listen-select(r: rref<a>, other: reactive<b>, selector: b -> c, f: listen-fn<c>, ?(==): (c, c) -> bool, ?kk-file-line: string): react-eff subscription<b>
+// `listen-select` is a special case of `listen`, where the `callback` is notified when a derivative of the reactive's state changes.
+pub fun rref/listen-select(r: rref<a>, other: reactive<b>, selector: b -> c, callback: listen-fn<c>, ?(==): (c, c) -> bool, ?kk-file-line: string): react-eff subscription<b>
   val last = ref(Nothing)
   fun notify(x)
     val next = selector(x)
@@ -184,64 +210,72 @@ pub fun rref/listen-select(r: rref<a>, other: reactive<b>, selector: b -> c, f: 
           True // Call the callback with the current value
         else 
           False
-  r.rref/listen(other, fn(x) f(selector(x)), notify) // Add the listener to the list of listeners
-pub fun family/listen-select(r: family-instance<a,b>, other: reactive-top<c>, selector: c -> d, f: listen-fn<d>, ?(==): (d, d) -> bool, ?kk-file-line: string): react-eff subscription<c>
-  r.reactive.listen-select(other.force, selector, f)
-pub fun delayed/listen-select(r: rref<a>, other: reactive-top<b>, selector: b -> c, f: listen-fn<c>, ?(==): (c, c) -> bool, ?kk-file-line: string): react-eff subscription<b>
-  r.listen-select(other.force, selector, f)
+  r.rref/listen(other, fn(x) callback(selector(x)), notify) // Add the listener to the list of listeners
+// `listen-select` is a special case of `listen`, where the `callback` is notified when a derivative of the reactive's state changes.
+pub fun family/listen-select(r: family-instance<a,b>, other: reactive-top<c>, selector: c -> d, callback: listen-fn<d>, ?(==): (d, d) -> bool, ?kk-file-line: string): react-eff subscription<c>
+  r.reactive.listen-select(other.force, selector, callback)
+// `listen-select` is a special case of `listen`, where the `callback` is notified when a derivative of the reactive's state changes.
+pub fun delayed/listen-select(r: rref<a>, other: reactive-top<b>, selector: b -> c, callback: listen-fn<c>, ?(==): (c, c) -> bool, ?kk-file-line: string): react-eff subscription<b>
+  r.listen-select(other.force, selector, callback)
 
 
-// Listen-self is a special case of listen, where we want to listen to the current reactive's state
-// We don't have to provide the reactive we want to listen to, since we are already in the context of the reactive
-// And we add the cancelation to our own cancelation list
+// `listen-self` is a special case of `listen`, which listens to the current reactive's state.
 pub fun rref/listen-self(r : rref<a>, callback: listen-fn<a>, immediate: bool = False, ?kk-file-line: string): react-eff subscription<a>
   val sub = r.rref.listen(callback, fn(x) True, immediate=immediate) // Add the listener to the list of listeners
+  // We add the cancelation to our own cancelation list.
   r.rref.add-subscription(sub)
   sub
+
+// `listen-self` is a special case of `listen`, which listens to the current reactive's state.
 pub fun family/listen-self(r : family-instance<a,b>, callback: listen-fn<a>, immediate: bool = False, ?kk-file-line: string): react-eff subscription<a>
   r.reactive.rref/listen-self(callback, immediate=immediate)
 
-fun listener/pause(l: listener<a>): listener<a>
-  match l
-    Listener(sid, callback, canceled, _, notify) -> Listener(sid, callback, canceled, True, notify)
-fun listener/unpause(l: listener<a>): listener<a>
-  match l
-    Listener(sid, callback, canceled, _, notify) -> Listener(sid, callback, canceled, False, notify)
-fun sub/cancel(l : subscription<a>)
-  l.canceled.set(True)
-
 // Some helper functions to manage subscription, stops when it finds the listener and adjusts it
 alias listeners<a> = list<listener<a>>
+// Pause the listener with the `id`
 fun listeners/pause(listeners: listeners<a>, id: int): listeners<a>
   match listeners
     Nil -> Nil // TODO: Error?
     Cons(l, ls) ->
       if l.sid == id then Cons(l.pause, ls)
       else Cons(l, pause(ls, id))
+// Unpause the listener with the `id`
 fun listeners/unpause(listeners: listeners<a>, id: int): listeners<a>
   match listeners
     Nil -> Nil // TODO: Error?
     Cons(l, ls) ->
       if l.sid == id then Cons(l.unpause, ls)
       else Cons(l, unpause(ls, id)) 
+// Unpause a listener
+fun listener/pause(l: listener<a>): listener<a>
+  match l
+    Listener(sid, callback, canceled, _, notify) -> Listener(sid, callback, canceled, True, notify)
+// Pause a listener
+fun listener/unpause(l: listener<a>): listener<a>
+  match l
+    Listener(sid, callback, canceled, _, notify) -> Listener(sid, callback, canceled, False, notify)
 
-// Helper functions to manage subscriptions
-// The subscriptions keep track of which watch call occurs before which subscriptions
-// This way when a reactive's dependency changes
-//  - we cancel the subscriptions that are no longer valid
-//  - but keep the ones that occurred before the watch
+
+// Helper functions and types to manage subscriptions
+// The subscriptions keep track of which dependencies occur before which subscriptions
+// When a reactive's dependency changes
+//  - we cancel the subscriptions that are no longer valid (came after the dependency)
+//  - and keep the ones that occurred before the dependency
+alias subscriptions = list<(int, list<subscriptionx>)>
+// Subscriptions could be of any type subscription<any>
+// We need a type-less view of the methods we need from them to put them in a list together
 abstract struct subscriptionx
   cancel: unit-cb
 
-fun sub-cancel(sub: subscription<b>): unit-cb
-  fn() 
-    sub.cancel(); 
-    sub.rref.rref.cancel_(sub)
+// Cancels a subscription by first marking it as canceled (in case an old version was taken from a ref immutably)
+fun sub/cancel(sub : subscription<a>)
+  sub.canceled.set(True)
+  sub.rref.rref.cancel_(sub)
 
+// Add a subscription to the reactor, by remembering to cancel it
 fun reactor/add-subscription(r: ev<reactor<a>>, sub: subscription<b>): react-eff ()
-  r.add-cancel(sub.sub-cancel)
+  r.add-cancel(fn() sub.cancel)
 
-alias subscriptions = list<(int, list<subscriptionx>)>
 // Adds to the latest subscription list
 fun add-sub(subs: subscriptions, sub: subscriptionx): exn subscriptions
   match subs
@@ -251,7 +285,7 @@ fun add-cancel-before(subs: subscriptions, id: int, sub: subscriptionx): exn sub
   match subs
     Cons((ix, cs), css) | ix < id -> Cons((ix, Cons(sub, cs)), css)
     Cons(cs, css) -> Cons(cs, css.add-cancel-before(id, sub))
-// Cancel and remove all cancelations that are after the current id
+// Split the subscription list into the subscriptions to be canceled, and the rest
 fun split-after(subs: subscriptions, id: int): react-eff (list<subscriptionx>, subscriptions)
   match subs
     Nil -> 
@@ -264,14 +298,15 @@ fun split-after(subs: subscriptions, id: int): react-eff (list<subscriptionx>, s
       val (cancels', subs') = split-after(rst, id)
       (cancels ++ cancels', subs')
 
+// Cancels all subscriptions after the id.
 fun cancel-all-after(subs: subscriptions, id: int): react-eff subscriptions
   val (cancels, subs') = subs.split-after(id)
   cancels.foreach(fn(s) s.cancel.())
   subs'
 
-// A wrapper around `def-reactive` that creates a memoized family of reactives
-// If the same argument is used, the same reactive is returned
-// This is useful for creating families of reactives that are similar, but have different arguments
+// A wrapper around `def-reactive` that creates a memoized family of reactives.
+// If the same argument is used, the same reactive is returned.
+// This is useful for creating families of reactives that are similar, but have different arguments.
 pub fun def-family(reactor-fn: (family-instance<a,b>) -> react-eff a, name: maybe<string> = Nothing, auto-reset = True,
                   ?b/show: (b) -> react-eff string, ?b/(==): (b, b) -> react-eff bool,
                   ?a/show: (a) -> react-eff string, ?a/(==): (a, a) -> react-eff bool, ?kk-file-line: string): (b -> react-eff reactive-top<a>)
@@ -286,7 +321,7 @@ pub fun def-family(reactor-fn: (family-instance<a,b>) -> react-eff a, name: mayb
       Nothing -> // Else create it based off of the reactor-fn template, and the reactive argument
         val r = 
           with delay
-          mk-reactive(name = name.map(fn(n) n ++ arg.show), auto-reset = auto-reset, is-family = True, ?show=a/show) fn(ref)
+          new-reactive(name = name.map(fn(n) n ++ arg.show), auto-reset = auto-reset, is-family = True, ?show=a/show) fn(ref)
             ref.rref/rref.add-cancel fn() 
               // trace("Removed family " ++ arg.show)
               reactives := (!reactives).filter(fn(r) !(r.fst == arg))
@@ -294,14 +329,17 @@ pub fun def-family(reactor-fn: (family-instance<a,b>) -> react-eff a, name: mayb
         reactives := Cons((arg, r), (!reactives))
         r
 
-// Defines a new reactive under a delay so it can be stored in a top-level variable
+// Defines a new reactive under a delay so it can be stored in a top-level variable.
+// `reactor-fn` takes a `rref<a>` which lets you:
+// - manipulate the state and lifecycle of the reactive 
+// - register dependencies on other reactives, and more
 pub fun def-reactive(reactor-fn: rref<a> -> react-eff a, name: maybe<string> = Nothing, auto-reset = False,
                     ?show: (a) -> react-eff string, ?(==): (a, a) -> react-eff bool, ?kk-file-line: string): reactive-top<a>
   with delay
-  mk-reactive(reactor-fn, name = name, auto-reset = auto-reset)
+  new-reactive(reactor-fn, name = name, auto-reset = auto-reset)
 
-// Constructs a new reactive, with a name and a function `reactor-fn` to run to manage state
-fun mk-reactive(reactor-fn: rref<a> -> react-eff a, name: maybe<string> = Nothing, auto-reset = False, is-family = False,
+// Constructs a new reactive, with a name and a function `reactor-fn` to run to manage state.
+pub fun new-reactive(reactor-fn: rref<a> -> react-eff a, name: maybe<string> = Nothing, auto-reset = False, is-family = False,
                 ?show: (a) -> react-eff string, ?(==): (a, a) -> react-eff bool, ?kk-file-line: string): react-eff reactive<a>
   // The name of the reactive
   val xname = name.default(kk-file-line) 
@@ -405,7 +443,7 @@ fun mk-reactive(reactor-fn: rref<a> -> react-eff a, name: maybe<string> = Nothin
         // TODO: We need to only call the first watcher for each reactive (in the reversed list) (unless the first one shouldn't be notified)
         // Or we need to handle the fact that listeners could be removed when we are iterating over them
         // Such as containing a mutable canceled field that we could check
-        (!listeners).reverse.foreach fn(listener) // Notify all listeners
+        (!listeners).foreach fn(listener) // Notify all listeners
           if !(!(listener.sub.canceled)) && listener.notify.(new-state) then
             listener.callback.(new-state)
           ()
@@ -452,7 +490,7 @@ fun mk-reactive(reactor-fn: rref<a> -> react-eff a, name: maybe<string> = Nothin
         else 
           next := Just(fn() rcontext.resume(sel(b)))
       // trace("Got cancelation")
-      subscriptions := (!subscriptions).add-cancel-before(uid, Subscriptionx(sub.sub-cancel))
+      subscriptions := (!subscriptions).add-cancel-before(uid, Subscriptionx(fn() sub.cancel))
       if !(!paused) then
         if other.rref.is-initialized() then
           rcontext.resume(sel(other.current()))
@@ -467,81 +505,117 @@ fun mk-reactive(reactor-fn: rref<a> -> react-eff a, name: maybe<string> = Nothin
   (!refx).unjust
 
 
-// The following functions are just wrappers around the reactor's methods
+// The following functions are just wrappers around the reactor's methods.
+
+// Restart the reactive from the beginning, clearing the state.
 pub fun rref/restart(r: rref<a>): pure ()
   r.rref.restart_()
+// Restart the reactive from the beginning, clearing the state.
 pub fun family/restart(r: family-instance<a,b>): pure ()
   r.reactive.restart()
+// Restart the reactive from the beginning, clearing the state.
 pub fun reactive/restart(r: reactive<a>): pure ()
   r.rref.restart_()
+// Restart the reactive from the beginning, clearing the state.
 pub fun delayed/restart(r: reactive-top<a>): react-eff ()
   r.force.restart()
+// Reset the reactive's state to the beginning without demanding the value.
 pub fun rref/reset(r: rref<a>): pure ()
   r.rref.reset_()
+// Reset the reactive's state to the beginning without demanding the value.
 pub fun family/reset(r: family-instance<a,b>): pure ()
   r.reactive.reset()
+// Reset the reactive's state to the beginning without demanding the value.
 pub fun reactive/reset(r: reactive<a>): pure ()
   r.rref.reset_()
+// Reset the reactive's state to the beginning without demanding the value.
 pub fun delayed/reset(r: reactive-top<a>): react-eff ()
   r.force.reset()
+// Check if there are any listeners, and if not reset the reactive.
 pub fun rref/check-reset(r: rref<a>): pure ()
   r.rref.check-reset()
+// Check if there are any listeners, and if not reset the reactive.
 pub fun family/check-reset(r: family-instance<a,b>): pure ()
   r.reactive.check-reset()
+// Check if there are any listeners, and if not reset the reactive.
 pub fun reactive/check-reset(r: reactive<a>): pure ()
   r.rref.check-reset()
+// Check if there are any listeners, and if not reset the reactive.
 pub fun delayed/check-reset(r: reactive-top<a>): react-eff ()
   r.force.check-reset()
+// Pause the reactive, so it doesn't react to changes by dependencies.
 pub fun rref/pause(r: rref<a>): pure ()
   r.rref.pause()
+// Pause the reactive, so it doesn't react to changes by dependencies.
 pub fun family/pause(r: family-instance<a,b>): pure ()
   r.reactive.pause()
+// Pause the reactive, so it doesn't react to changes by dependencies.
 pub fun reactive/pause(r: reactive<a>): pure ()
   r.rref.pause()
+// Pause the reactive, so it doesn't react to changes by dependencies.
 pub fun delayed/pause(r: reactive-top<a>): react-eff ()
   r.force.pause()
+// Unpause the reactive, so it will react to changes by dependencies.
+// The reactive will immediately react based on changes that happened while paused.
 pub fun rref/unpause(r: rref<a>): pure ()
   r.rref.unpause()
+// Unpause the reactive, so it will react to changes by dependencies.
+// The reactive will immediately react based on changes that happened while paused.
 pub fun family/unpause(r: family-instance<a,b>): pure ()
   r.reactive.unpause()
+// Unpause the reactive, so it will react to changes by dependencies.
+// The reactive will immediately react based on changes that happened while paused.
 pub fun reactive/unpause(r: reactive<a>): pure ()
   r.rref.unpause()
+// Unpause the reactive, so it will react to changes by dependencies.
+// The reactive will immediately react based on changes that happened while paused.
 pub fun delayed/unpause(r: reactive-top<a>): react-eff ()
   r.force.unpause()
+// Get the current state of the reactive.
 pub fun rref/current(r: rref<a>): react-eff a
   val sub = r.rref.listen_(fn(_) (), "", fn(_) False)
   val x = r.rref.current_()
-  sub.cancel.()
-  sub.rref.rref.cancel_(sub)
+  sub.cancel()
   x
+// Get the current state of the reactive.
 pub fun family/current(r: family-instance<a,b>): react-eff a
   r.reactive.current()
+// Get the current state of the reactive.
 pub fun reactive/current(r: reactive<a>): react-eff a
   val sub = r.rref.listen_(fn(_) (), "", fn(_) False)
   val x = r.rref.current_()
-  sub.cancel.()
-  sub.rref.rref.cancel_(sub)
+  sub.cancel()
   x
+// Get the current state of the reactive.
 pub fun delayed/current(r: reactive-top<a>): react-eff a
   r.force.current()
+// Get the name of the reactive.
 pub fun rref/name(r: rref<a>): pure string
   r.rref.name_()
+// Get the name of the reactive.
 pub fun family/name(r: family-instance<a,b>): pure string
   r.reactive.name()
+// Get the name of the reactive.
 pub fun reactive/name(r: reactive<a>): pure string
   r.rref.name_()
+// Get the name of the reactive.
 pub fun delayed/name(r: reactive-top<a>): react-eff string
   r.force.name()
+// Emit a new state from the reactive.
 pub fun rref/emit(r: rref<a>, a: a): pure ()
   r.rref.emit_(a)
+// Emit a new state from the reactive.
 pub fun family/emit(r: family-instance<a,b>, a: a): pure ()
   r.reactive.emit(a)
+// Emit a new state from the reactive.
 pub fun rref/mutate(r: reactive<a>, a: a): pure ()
   r.rref.emit_(a)
+// Emit a new state from the reactive.
 pub fun delayed/mutate(r: reactive-top<a>, a: a): react-eff ()
   r.force.rref.emit_(a)
+// Emit a new state from the reactive.
 pub fun rref/call(r: reactive<a>, a: a): pure ()
   r.rref.emit_(a)
+// Emit a new state from the reactive.
 pub fun delayed/call(r: reactive-top<a>, a: a): react-eff ()
   r.force.rref.emit_(a)
-

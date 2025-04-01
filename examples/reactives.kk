@@ -7,6 +7,104 @@
 ----------------------------------------------------------------------------*/
 import reactives/reactives
 
+// A reactive can be a top-level variable!
+val r1 : reactive-top<int> =
+   // You define it like this
+   with r <- def-reactive(name = Just("r1"))
+   trace("Init r1")
+   // You can listen to your own state changes
+   r.listen-self fn(x) 
+      trace("R1: " ++ x.show)
+   
+   trace("emit 0 from r1")
+   // You can emit new states
+   r.emit(0)
+
+   trace("emit 1 from r1")
+   r.emit(1)
+
+   trace("emit 2 from r1")
+   // The return value is the last state that is emitted (and usually the starting state as well)
+   2
+
+// You can create other reactives that depend on the first
+val r2 : reactive-top<int> = 
+   with r <- def-reactive(name = Just("r2"))
+   r.listen-self fn(x) 
+      trace("R2: " ++ x.show)
+   trace("Init r2")
+
+   // Using `select` you can just be notified when a derived value from `r1` changes
+   // Only the rest of the body will be rerun when this dependency changes
+   // Earlier computations that are not affected will not be recomputed (so you won't recompute expensive stuff)
+   val b = r.select(r1, fn(x) x == 0)
+
+   trace("b " ++ b.show)
+
+   // Emits a value from this reactive
+   trace("emit 1 from r2")
+   r.emit(1)
+   // Starts `watch`ing the state from `r1` (without filtering like `select`)
+   // The rest of this function will change every time `r1` changes
+   //  However the code between `b` and here will only change when `r1`'s state changes to or from 0
+   val x = r.watch(r1)
+
+   // Current get's the current value of this reactive. Do not call it unless it is initialized!
+   r.current() + x
+
+// Often reactives will be very simple, with some initial state.
+// The following two reactives are set up to be "mutations", or reactives that start a chain of computation
+val addX : reactive-top<int> = 
+   with r <- def-reactive(name = Just("addX"))
+   0
+val subX : reactive-top<int> = 
+   with r <- def-reactive(name = Just("subX"))
+   0
+
+// This reactive will depend on the mutations
+val r3 : reactive-top<int> = 
+   with r <- def-reactive(name = Just("r3"))
+   r.listen-self fn(x) 
+      trace("R3: " ++ x.show)
+   trace("Init r3")
+
+   // When addX is changed
+   r.on(addX) fn(x) // Add the current value of addX to our value
+      r.emit(r.current() + x)
+   r.on(subX) fn(x) // Subtract the current value of subX from our value
+      r.emit(r.current() - x)
+   
+   // Emits a value from this reactive
+   trace("emit 2 from r3")
+   r.emit(2)
+   // Starts watching r2
+   val x = r.watch(r2)
+
+   r.current() * x
+
+fun main()
+   // Trigger the initial computation
+   r3.current()
+   // Restart r3 from the beginning - should finish faster since r2 and r1 will not be changing
+   trace("\n\nRestart r3:\n")
+   r3.restart()
+   // Explicitly mutate r3's state from the outside
+   trace("\n\nMutate r3:\n")
+   r3.mutate(100)
+   trace("\n\nPause r3:\n")
+   r3.pause() // Pause r3's computation, so it doesn't react
+   // Restart r2 from the beginning - should finish faster since r1 will not be changing
+   trace("\n\nRestart r2:\n")
+   r2.restart()
+   // Unpause r3 to let it catch up with any updates to dependencies
+   trace("\n\nUnpause r3:\n")
+   r3.unpause()
+   // Call our mutations (i.e. set their state)
+   trace("\n\nCall mutations r3:\n")
+   addX.call(10)
+   subX.call(100)
+
+// A reactive family, the reactive has a `arg` parameter to tell you what the reactive's argument is
 val f1 : reactive-family<int,int> = 
    with r <- def-family(name = Just("f1"))
    r.listen-self fn(x)
@@ -14,70 +112,5 @@ val f1 : reactive-family<int,int> =
    r.emit(0)
    r.arg + 2
 
-val r1 : reactive-top<int> =
-   with r <- def-reactive(name = Just("r1"))
-   r.listen-self fn(x) 
-      trace("R1: " ++ x.show)
-   
-   trace("Hi1")
-   r.emit(0)
-
-   trace("Hi1-2")
-   r.emit(1)
-
-   trace("Hi1-3")
-   2
-
-val r2 : reactive-top<int> = 
-   with r <- def-reactive(name = Just("r2"))
-   r.listen-self fn(x) 
-      trace("R2: " ++ x.show)
-   
-   val b = r.select(r1, fn(x) x == 0)
-   trace("Hi2 " ++ b.show)
-   // Emits a value from this reactive
-   r.emit(1)
-   // Starts watching r1, and triggers its initialization if not already listened to.
-   val x = r.watch(r1)
-
-   r.current() + x
-
-val addX : reactive-top<int> = 
-   with r <- def-reactive(name = Just("addX"))
-   0
-
-val subX : reactive-top<int> = 
-   with r <- def-reactive(name = Just("subX"))
-   0
-
-val r3 : reactive-top<int> = 
-   with r <- def-reactive(name = Just("r3"))
-   r.listen-self fn(x) 
-      trace("R3: " ++ x.show)
-   r.on(addX) fn(x) 
-      r.emit(r.current() + x)
-   r.on(subX) fn(x)
-      r.emit(r.current() - x)
-   
-   trace("Hi3")
-   // Emits a value from this reactive
-   r.emit(2)
-   // Starts watching r2, and triggers it's initialization if not already listened to.
-   val x = r.watch(r2)
-
-   r.current() * x
-
-fun main()
-   // r3.listen fn(x)
-   //    trace("Final: " ++ x.show)
-   r3.current()
-   trace("Restart r3")
-   r3.restart()
-   trace("Restart r2")
-   r3.mutate(100)
-   r3.pause()
-   r2.restart()
-   r3.unpause()
-   addX.call(10)
-   subX.call(100)
+fun example-family()
    f1(0).current()
