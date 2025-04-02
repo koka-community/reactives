@@ -11,19 +11,19 @@ import reactives/reactives
 val r1 : reactive-top<int> =
    // You define it like this
    with r <- def-reactive(name = Just("r1"))
-   trace("Init r1")
+   println("Init r1")
    // You can listen to your own state changes
    r.listen-self fn(x) 
-      trace("R1: " ++ x.show)
+      println("R1: " ++ x.show)
    
-   trace("emit 0 from r1")
+   println("emit 0 from r1")
    // You can emit new states
    r.emit(0)
 
-   trace("emit 1 from r1")
+   println("emit 1 from r1")
    r.emit(1)
 
-   trace("emit 2 from r1")
+   println("emit 2 from r1")
    // The return value is the last state that is emitted (and usually the starting state as well)
    2
 
@@ -31,18 +31,18 @@ val r1 : reactive-top<int> =
 val r2 : reactive-top<int> = 
    with r <- def-reactive(name = Just("r2"))
    r.listen-self fn(x) 
-      trace("R2: " ++ x.show)
-   trace("Init r2")
+      println("R2: " ++ x.show)
+   println("Init r2")
 
    // Using `select` you can just be notified when a derived value from `r1` changes
    // Only the rest of the body will be rerun when this dependency changes
    // Earlier computations that are not affected will not be recomputed (so you won't recompute expensive stuff)
    val b = r.select(r1, fn(x) x == 0)
 
-   trace("b " ++ b.show)
+   println("b " ++ b.show)
 
    // Emits a value from this reactive
-   trace("emit 1 from r2")
+   println("emit 1 from r2")
    r.emit(1)
    // Starts `watch`ing the state from `r1` (without filtering like `select`)
    // The rest of this function will change every time `r1` changes
@@ -65,8 +65,8 @@ val subX : reactive-top<int> =
 val r3 : reactive-top<int> = 
    with r <- def-reactive(name = Just("r3"))
    r.listen-self fn(x) 
-      trace("R3: " ++ x.show)
-   trace("Init r3")
+      println("R3: " ++ x.show)
+   println("Init r3")
 
    // When addX is changed
    r.on(addX) fn(x) // Add the current value of addX to our value
@@ -75,7 +75,7 @@ val r3 : reactive-top<int> =
       r.emit(r.current() - x)
    
    // Emits a value from this reactive
-   trace("emit 2 from r3")
+   println("emit 2 from r3")
    r.emit(2)
    // Starts watching r2
    val x = r.watch(r2)
@@ -86,21 +86,21 @@ fun main()
    // Trigger the initial computation
    r3.current()
    // Restart r3 from the beginning - should finish faster since r2 and r1 will not be changing
-   trace("\n\nRestart r3:\n")
+   println("\nRestart r3:")
    r3.restart()
    // Explicitly mutate r3's state from the outside
-   trace("\n\nMutate r3:\n")
+   println("\nMutate r3:")
    r3.mutate(100)
-   trace("\n\nPause r3:\n")
+   println("\nPause r3:")
    r3.pause() // Pause r3's computation, so it doesn't react
    // Restart r2 from the beginning - should finish faster since r1 will not be changing
-   trace("\n\nRestart r2:\n")
+   println("\nRestart r2:")
    r2.restart()
    // Unpause r3 to let it catch up with any updates to dependencies
-   trace("\n\nUnpause r3:\n")
+   println("\nUnpause r3:")
    r3.unpause()
    // Call our mutations (i.e. set their state)
-   trace("\n\nCall mutations r3:\n")
+   println("\nCall mutations r3:")
    addX.call(10)
    subX.call(100)
 
@@ -108,7 +108,7 @@ fun main()
 val f1 : reactive-family<int,int> = 
    with r <- def-family(name = Just("f1"))
    r.listen-self fn(x)
-      trace("Family " ++ r.arg.show ++ " " ++ x.show)
+      println("Family " ++ r.arg.show ++ " " ++ x.show)
    r.emit(0)
    r.arg + 2
 

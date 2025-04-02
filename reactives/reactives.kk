@@ -80,7 +80,7 @@ named effect reactor<a>
 
 // The basic effects needed for reactives <pure> (due to named handlers), 
 //   and st<global> (due to the fact that we need to be able to mutate).
-pub alias react-eff = <pure,st<global>>
+pub alias react-eff = io
 // A callback type used for cancelations, initialization, and other things.
 pub alias unit-cb = () -> react-eff ()
 // A callback type used for listeners and dependencies.
