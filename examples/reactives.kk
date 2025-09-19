@@ -107,10 +107,16 @@ fun main()
 // A reactive family, the reactive has a `arg` parameter to tell you what the reactive's argument is
 val f1 : reactive-family<int,int> = 
    with n <- def-family(name = Just("f1"), ?a/show=int/show, ?b/show=int/show, ?a/(==) = int/(==), ?b/(==) = int/(==))
+   println("Created " ++ n.arg.show)
    val r : family-instance<int,int> = n
    r.family/listen-self fn(x: int)
       println("Family " ++ r.arg.show ++ " " ++ x.show)
    r.emit(0)
+   if r.arg == 0 then 
+      r.family/listen-variant(1, immediate=True) fn(x: int)
+         println("Family variant listen 1 " ++ x.show)
+      ()
+   else ()
    r.arg + 2
 
 fun example-family()

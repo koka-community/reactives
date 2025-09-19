@@ -118,7 +118,7 @@ pub alias reactive-family<a,b> = ((b) -> react-eff reactive-top<a>)
 
 // A family instance is a specific instance of a family, that holds the reactive and the argument
 pub type family-instance<a,b>
-  Instance(reactive: rref<a>, arg: b)
+  Instance(reactive: rref<a>, arg: b, create: (b) -> react-eff reactive-top<a>)
 
 // Register to rerun the continuation with the current state of `other` whenever it changes.
 // - Set `immediate` to `False` if you don't want to demand the other reactive's value immediately, and only react if it `emit`s by itself.
@@ -230,6 +230,13 @@ pub fun rref/listen-self(r : rref<a>, callback: listen-fn<a>, immediate: bool = 
 pub fun family/listen-self(r : family-instance<a,b>, callback: listen-fn<a>, immediate: bool = False, ?kk-file-line: string): react-eff subscription<a>
   r.reactive.rref/listen-self(callback, immediate=immediate)
 
+// `listen-self` is a special case of `listen`, which listens to the current reactive's state.
+pub fun family/listen-variant(r : family-instance<a,b>, b: b, callback: listen-fn<a>, immediate: bool = False, ?kk-file-line: string): react-eff subscription<a>
+  val variant = (r.create)(b).force
+  val sub = variant.rref.listen(callback, fn(x) True, immediate=immediate)
+  r.reactive.rref.add-subscription(sub)
+  sub
+
 // Some helper functions to manage subscription, stops when it finds the listener and adjusts it
 alias listeners<a> = list<listener<a>>
 // Pause the listener with the `id`
@@ -313,9 +320,9 @@ pub fun def-family(reactor-fn: (family-instance<a,b>) -> react-eff a, name: mayb
   with unsafe-total
   // Memoized list of all reactives using the `reactor-fn`, with one reactive per unique argument
   val reactives : some<a,b> ref<global,list<(b, reactive-top<a>)>> = ref([])
-  fn(arg: some<b> b)
+  fun create(arg: some<b> b)
     // Check if the reactive already exists
-    val react = (!reactives).find(fn(r) r.fst == arg)
+    val react = (!reactives).find(fn(r) ?b/(==)(r.fst, arg))
     match react
       Just(r) -> r.snd // If so return
       Nothing -> // Else create it based off of the reactor-fn template, and the reactive argument
@@ -325,9 +332,10 @@ pub fun def-family(reactor-fn: (family-instance<a,b>) -> react-eff a, name: mayb
             ref.rref/rref.add-cancel fn() 
               // trace("Removed family " ++ arg.show)
               reactives := (!reactives).filter(fn(r) !(r.fst == arg))
-            reactor-fn(Instance(ref, arg))
+            reactor-fn(Instance(ref, arg, create))
         reactives := Cons((arg, r), (!reactives))
         r
+  create
 
 // Defines a new reactive under a delay so it can be stored in a top-level variable.
 // `reactor-fn` takes a `rref<a>` which lets you:
