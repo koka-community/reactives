@@ -13,8 +13,8 @@ val r1 : reactive-top<int> =
    with r <- def-reactive(name = Just("r1"))
    println("Init r1")
    // You can listen to your own state changes
-   r.listen-self fn(x) 
-      println("R1: " ++ x.show)
+   r.rref/listen-self fn(x: int) 
+      trace("R1: " ++ x.show)
    
    println("emit 0 from r1")
    // You can emit new states
@@ -30,7 +30,7 @@ val r1 : reactive-top<int> =
 // You can create other reactives that depend on the first
 val r2 : reactive-top<int> = 
    with r <- def-reactive(name = Just("r2"))
-   r.listen-self fn(x) 
+   r.rref/listen-self fn(x: int) 
       println("R2: " ++ x.show)
    println("Init r2")
 
@@ -64,7 +64,7 @@ val subX : reactive-top<int> =
 // This reactive will depend on the mutations
 val r3 : reactive-top<int> = 
    with r <- def-reactive(name = Just("r3"))
-   r.listen-self fn(x) 
+   r.rref/listen-self fn(x: int) 
       println("R3: " ++ x.show)
    println("Init r3")
 
@@ -106,8 +106,9 @@ fun main()
 
 // A reactive family, the reactive has a `arg` parameter to tell you what the reactive's argument is
 val f1 : reactive-family<int,int> = 
-   with r <- def-family(name = Just("f1"))
-   r.listen-self fn(x)
+   with n <- def-family(name = Just("f1"), ?a/show=int/show, ?b/show=int/show, ?a/(==) = int/(==), ?b/(==) = int/(==))
+   val r : family-instance<int,int> = n
+   r.family/listen-self fn(x: int)
       println("Family " ++ r.arg.show ++ " " ++ x.show)
    r.emit(0)
    r.arg + 2
